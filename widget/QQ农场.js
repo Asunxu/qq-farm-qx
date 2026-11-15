@@ -21,6 +21,9 @@ const K_TOKEN = 'qqfarm_w_token';
 const K_TITLE = 'qqfarm_w_title';
 const K_COOL = 'qqfarm_w_cool';
 const K_GOLD = 'qqfarm_w_gold';
+const K_COUPON = 'qqfarm_w_coupon';
+const K_DIAMOND = 'qqfarm_w_diamond';
+const K_BEAN = 'qqfarm_w_bean';
 const K_TODAY = 'qqfarm_w_today';
 
 // ============ 配色 ============
@@ -35,6 +38,9 @@ const C = {
   offline: '#4E6159',
   accent: '#7BE495',
   gold: '#FFD666',
+  coupon: '#8FB8FF',
+  diamond: '#9EE7FF',
+  bean: '#FFB86B',
   warn: '#FF8A8A',
 };
 
@@ -222,6 +228,11 @@ async function fetchData() {
       platform: a.platform || 'qq',
       level: Number(a.level) || 0,
       gold: 0,
+      coupon: 0,
+      diamond: 0,
+      goldBean: 0,
+      exp: 0,
+      lvPct: 0,
       uptime: 0,
       ops: null,
       connected: false,
@@ -256,23 +267,44 @@ async function fetchData() {
     x.connected = !!(s.connection && s.connection.connected);
     x.uptime = Number(s.uptime) || 0;
     x.gold = Number(st.gold) || 0;
+    x.coupon = Number(st.coupon) || 0;
+    x.diamond = Number(st.diamond) || 0;
+    x.goldBean = Number(st.goldBean) || 0;
+    x.exp = Number(st.exp) || 0;
+    const lp = s.levelProgress || null;
+    if (lp && Number(lp.needed)) {
+      x.lvPct = Math.max(0, Math.min(100, Math.round((Number(lp.current) || 0) * 100 / Number(lp.needed))));
+    }
     if (Number(st.level)) x.level = Number(st.level);
     if (st.name) x.name = st.name;
     x.ops = s.operations || null;
+    x.gainGold = Number(s.sessionGoldGained) || 0;
+    x.gainCoupon = Number(s.sessionCouponGained) || 0;
     if (s.wsError) x.note = String(typeof s.wsError === 'string' ? s.wsError : (s.wsError.message || '连接异常'));
   });
 
-  const today = { harvest: 0, stealth: 0, water: 0, plant: 0 };
+  const today = { harvest: 0, stealth: 0, water: 0, plant: 0, gift: 0 };
   let goldTotal = 0;
+  let couponTotal = 0;
+  let diamondTotal = 0;
+  let beanTotal = 0;
+  let gainGoldTotal = 0;
+  let gainCouponTotal = 0;
   let online = 0;
   list.forEach(function (x) {
     if (x.connected) online += 1;
     goldTotal += x.gold || 0;
+    couponTotal += x.coupon || 0;
+    diamondTotal += x.diamond || 0;
+    beanTotal += x.goldBean || 0;
+    gainGoldTotal += x.gainGold || 0;
+    gainCouponTotal += x.gainCoupon || 0;
     if (x.ops) {
       today.harvest += Number(x.ops.harvest) || 0;
       today.stealth += Number(x.ops.steal) || 0;
       today.water += Number(x.ops.helpWater) || 0;
       today.plant += Number(x.ops.farming) || Number(x.ops.plant) || 0;
+      today.gift += Number(x.ops.tongQiGift) || 0;
     }
   });
 
@@ -285,6 +317,11 @@ async function fetchData() {
     accounts: list,
     today: today,
     goldTotal: goldTotal,
+    couponTotal: couponTotal,
+    diamondTotal: diamondTotal,
+    beanTotal: beanTotal,
+    gainGoldTotal: gainGoldTotal,
+    gainCouponTotal: gainCouponTotal,
     updatedAt: Date.now(),
   };
 }
@@ -367,35 +404,68 @@ function buildAccountRow(w, acc) {
 function showGold() {
   return cfgGet(K_GOLD, '1') !== '0';
 }
-
+function showCoupon() {
+  return cfgGet(K_COUPON, '1') !== '0';
+}
+function showDiamond() {
+  return cfgGet(K_DIAMOND, '1') !== '0';
+}
+function showBean() {
+  return cfgGet(K_BEAN, '1') !== '0';
+}
 function showToday() {
   return cfgGet(K_TODAY, '1') !== '0';
 }
 
-function buildAccountSub(w, acc) {
+// 四类货币：金币 / 点券 / 钻石 / 金豆（对应服务端 status.gold / coupon / diamond / goldBean）
+function currencyList(obj, max) {
+  const out = [];
+  if (showGold() && Number(obj.gold)) out.push({ k: '金币', v: fmtGold(obj.gold), c: C.gold });
+  if (showCoupon() && Number(obj.coupon)) out.push({ k: '点券', v: fmtGold(obj.coupon), c: C.coupon });
+  if (showDiamond() && Number(obj.diamond)) out.push({ k: '钻石', v: fmtGold(obj.diamond), c: C.diamond });
+  if (showBean() && Number(obj.goldBean)) out.push({ k: '金豆', v: fmtGold(obj.goldBean), c: C.bean });
+  return max ? out.slice(0, max) : out;
+}
+
+function buildCurrencyRow(w, acc) {
+  const items = currencyList(acc);
+  if (!items.length) return false;
   const s = w.addStack();
   s.centerAlignContent();
   s.addSpacer(14);
+  items.forEach(function (it, i) {
+    if (i > 0) {
+      const sep = s.addText(' · ');
+      sep.font = font(9, 'plain');
+      sep.textColor = new Color(C.dim);
+    }
+    const t = s.addText(it.k + ' ' + it.v);
+    t.font = font(10, 'plain');
+    t.textColor = new Color(it.c);
+    t.lineLimit = 1;
+    t.textOpacity = 0.9;
+  });
+  return true;
+}
 
-  const parts = [];
-  if (showGold() && acc.running && acc.gold) parts.push(fmtGold(acc.gold) + '金');
-  if (showToday() && acc.ops) {
-    const bits = [];
-    if (Number(acc.ops.harvest)) bits.push('收' + Number(acc.ops.harvest));
-    if (Number(acc.ops.steal)) bits.push('偷' + Number(acc.ops.steal));
-    if (Number(acc.ops.helpWater)) bits.push('水' + Number(acc.ops.helpWater));
-    if (bits.length) parts.push('今 ' + bits.join(' '));
-  }
-  if (!parts.length) {
-    if (acc.updatedAt) parts.push('更新于 ' + fmtTime(acc.updatedAt));
-    else parts.push(acc.platform === 'wx' ? '微信' : 'QQ');
-  }
+function buildOpsRow(w, acc) {
+  if (!showToday() || !acc.ops) return false;
+  const bits = [];
+  if (Number(acc.ops.harvest)) bits.push('收' + Number(acc.ops.harvest));
+  if (Number(acc.ops.steal)) bits.push('偷' + Number(acc.ops.steal));
+  if (Number(acc.ops.helpWater)) bits.push('水' + Number(acc.ops.helpWater));
+  if (Number(acc.ops.tongQiGift)) bits.push('同气' + Number(acc.ops.tongQiGift));
+  if (!bits.length) return false;
 
-  const t = s.addText(parts.join(' · '));
-  t.font = font(11, 'plain');
+  const s = w.addStack();
+  s.centerAlignContent();
+  s.addSpacer(14);
+  const t = s.addText('今 ' + bits.join(' '));
+  t.font = font(10, 'plain');
   t.textColor = new Color(C.sub);
+  t.textOpacity = 0.8;
   t.lineLimit = 1;
-  t.textOpacity = 0.85;
+  return true;
 }
 
 function buildToday(w, data) {
@@ -406,6 +476,7 @@ function buildToday(w, data) {
     if (data.today.harvest) bits.push('收 ' + data.today.harvest);
     if (data.today.stealth) bits.push('偷 ' + data.today.stealth);
     if (data.today.water) bits.push('水 ' + data.today.water);
+    if (data.today.gift) bits.push('同气 ' + data.today.gift);
     const label = bits.length ? '今日 ' + bits.join('  ') : '今日暂无操作';
     const t = s.addText(label);
     t.font = font(10, 'plain');
@@ -460,13 +531,32 @@ function buildSmall(w, data) {
     lab.textColor = new Color(C.sub);
   }
 
+  // 小尺寸只放得下两行货币：优先金币、点券
+  const totals = {
+    gold: data.goldTotal,
+    coupon: data.couponTotal,
+    diamond: data.diamondTotal,
+    goldBean: data.beanTotal,
+  };
+  const cur = currencyList(totals, 2);
+  if (cur.length) {
+    w.addSpacer(2);
+    cur.forEach(function (it) {
+      const line = w.addText(it.k + ' ' + it.v);
+      line.font = font(11, 'plain');
+      line.textColor = new Color(it.c);
+      line.lineLimit = 1;
+    });
+  }
+
   w.addSpacer();
 
   const foot = w.addStack();
   foot.centerAlignContent();
-  const g = foot.addText(showGold() && data.goldTotal ? fmtGold(data.goldTotal) + '金' : (data.running + ' 个在跑'));
-  g.font = font(11, 'plain');
-  g.textColor = new Color(data.goldTotal ? C.gold : C.sub);
+  const g = foot.addText(data.running + ' 个在跑');
+  g.font = font(10, 'plain');
+  g.textColor = new Color(C.sub);
+  g.textOpacity = 0.7;
   g.lineLimit = 1;
   foot.addSpacer();
   const u = foot.addText(fmtTime(data.updatedAt));
@@ -477,48 +567,113 @@ function buildSmall(w, data) {
 
 function buildMedium(w, data) {
   buildHeader(w, data);
-  w.addSpacer(7);
+  w.addSpacer(4);
 
-  // 1-2 个账号时每行带副信息；3 个以上改成紧凑单行，否则中尺寸会裁掉底部
-  const compact = data.accounts.length >= 3;
-  const list = data.accounts.slice(0, compact ? 4 : 2);
+  // 中尺寸一行一个账号，右侧放金币；点券/钻石/金豆合计放底部一行
+  const list = data.accounts.slice(0, 4);
   if (!list.length) {
     const e = w.addText('面板上还没有账号');
     e.font = font(12, 'plain');
     e.textColor = new Color(C.sub);
   }
 
-  const roomy = list.length === 1 && !compact;
   list.forEach(function (acc, i) {
-    if (i > 0) w.addSpacer(roomy ? 8 : 5);
-    buildAccountRow(w, acc);
-    if (!compact) {
-      w.addSpacer(2);
-      buildAccountSub(w, acc);
-    }
+    if (i > 0) w.addSpacer(3);
+    buildAccountRowGold(w, acc);
   });
 
   if (data.accounts.length > list.length) {
     w.addSpacer(3);
-    const more = w.addText('还有 ' + (data.accounts.length - list.length) + ' 个账号');
+    const more = w.addText('还有 ' + (data.accounts.length - list.length) + ' 个账号 · 大尺寸全显示');
     more.font = font(10, 'plain');
     more.textColor = new Color(C.dim);
+    more.lineLimit = 1;
   }
 
   w.addSpacer();
+  const totals = currencyList(
+    { gold: data.goldTotal, coupon: data.couponTotal, diamond: data.diamondTotal, goldBean: data.beanTotal },
+    4
+  );
+  if (totals.length) {
+    const s = w.addStack();
+    s.centerAlignContent();
+    totals.forEach(function (it, i) {
+      if (i > 0) {
+        const sep = s.addText(' · ');
+        sep.font = font(9, 'plain');
+        sep.textColor = new Color(C.dim);
+      }
+      const t = s.addText(it.k + ' ' + it.v);
+      t.font = font(10, 'plain');
+      t.textColor = new Color(it.c);
+      t.lineLimit = 1;
+    });
+    w.addSpacer(2);
+  }
   buildToday(w, data);
+}
+
+// 中尺寸用的紧凑行：左边名字+等级，右边金币
+function buildAccountRowGold(w, acc) {
+  const row = w.addStack();
+  row.centerAlignContent();
+
+  const dot = row.addText('●');
+  dot.font = font(9, 'plain');
+  dot.textColor = new Color(acc.connected ? C.online : C.offline);
+  row.addSpacer(5);
+
+  const n = row.addText(acc.name);
+  n.font = font(13, 'semibold');
+  n.textColor = new Color(acc.running ? C.name : C.dim);
+  n.lineLimit = 1;
+
+  row.addSpacer(6);
+
+  if (acc.level) {
+    const lv = row.addText('Lv' + acc.level);
+    lv.font = font(11, 'mono');
+    lv.textColor = new Color(C.accent);
+    lv.lineLimit = 1;
+  }
+
+  row.addSpacer();
+
+  let right = '';
+  let color = C.sub;
+  if (showGold() && acc.gold) {
+    right = fmtGold(acc.gold);
+    color = C.gold;
+  } else if (!acc.running) {
+    right = '未运行';
+    color = C.dim;
+  } else if (!acc.connected) {
+    right = acc.note ? '异常' : '连接中';
+    color = acc.note ? C.warn : C.sub;
+  } else {
+    right = '在线';
+  }
+  const r = row.addText(right);
+  r.font = font(12, 'plain');
+  r.textColor = new Color(color);
+  r.lineLimit = 1;
 }
 
 function buildLarge(w, data) {
   buildHeader(w, data);
-  w.addSpacer(8);
+  w.addSpacer(6);
 
-  const list = data.accounts.slice(0, 6);
+  const list = data.accounts.slice(0, 5);
   list.forEach(function (acc, i) {
-    if (i > 0) w.addSpacer(7);
+    if (i > 0) w.addSpacer(6);
     buildAccountRow(w, acc);
-    w.addSpacer(2);
-    buildAccountSub(w, acc);
+    w.addSpacer(1);
+    buildCurrencyRow(w, acc);
+    if (showToday() && acc.ops) {
+      w.addSpacer(1);
+      buildOpsRow(w, acc);
+    }
   });
 
   if (data.accounts.length > list.length) {
@@ -536,11 +691,18 @@ function buildLarge(w, data) {
   a.font = font(11, 'semibold');
   a.textColor = new Color(C.accent);
   sum.addSpacer();
-  const g = sum.addText(showGold() && data.goldTotal ? fmtGold(data.goldTotal) + '金' : '');
-  g.font = font(11, 'mono');
+  const g = sum.addText(showGold() && data.goldTotal ? '金币 ' + fmtGold(data.goldTotal) : '');
+  g.font = font(11, 'plain');
   g.textColor = new Color(C.gold);
 
-  w.addSpacer(4);
+  if (showCoupon() && data.couponTotal) {
+    sum.addSpacer(6);
+    const c = sum.addText('点券 ' + fmtGold(data.couponTotal));
+    c.font = font(11, 'plain');
+    c.textColor = new Color(C.coupon);
+  }
+
+  w.addSpacer(3);
   buildToday(w, data);
 }
 
@@ -566,7 +728,7 @@ function buildError(w, msg) {
   w.addSpacer();
 }
 
-function newWidget() {
+function newWidget(family) {
   const w = new ListWidget();
   try {
     const g = new LinearGradient();
@@ -579,13 +741,15 @@ function newWidget() {
     } catch (e2) {}
   }
   try {
-    w.setPadding(14, 14, 12, 14);
+    if (family === 'small') w.setPadding(10, 12, 10, 12);
+    else if (family === 'large') w.setPadding(14, 14, 12, 14);
+    else w.setPadding(11, 14, 10, 14);
   } catch (e) {}
   return w;
 }
 
 function render(data, family) {
-  const w = newWidget();
+  const w = newWidget(family);
   if (family === 'small') buildSmall(w, data);
   else if (family === 'large') buildLarge(w, data);
   else buildMedium(w, data);
@@ -593,13 +757,13 @@ function render(data, family) {
 }
 
 function renderError(msg, family) {
-  const w = newWidget();
+  const w = newWidget(family);
   buildError(w, msg);
   return w;
 }
 
 // ============ App 内设置界面 ============
-const VER = '1.0';
+const VER = '1.1';
 
 function loadCfg() {
   BASE = String(cfgGet(K_BASE, '') || '').replace(/\/+$/, '');
@@ -665,7 +829,8 @@ async function appUI() {
     const hc = head.addText(cfgGet(K_TITLE, 'QQ农场'),
       data
         ? (data.online + '/' + data.total + ' 在线 · ' + data.running + ' 个在跑'
-          + (data.total ? ' · ' + fmtGold(data.goldTotal) + '金' : ''))
+          + (data.goldTotal ? ' · 金 ' + fmtGold(data.goldTotal) : '')
+          + (data.couponTotal ? ' · 券 ' + fmtGold(data.couponTotal) : ''))
         : (err ? '连接失败' : '未配置面板'));
     hc.titleFont = font(24, 'bold');
     hc.subtitleFont = font(13, 'plain');
@@ -721,10 +886,17 @@ async function appUI() {
       draw();
       table.reload();
     });
-    valueRow('显示金币', cfgGet(K_GOLD, '1') === '1' ? '开' : '关', function () {
-      cfgSet(K_GOLD, cfgGet(K_GOLD, '1') === '1' ? '0' : '1');
-      draw();
-      table.reload();
+    [
+      ['金币', K_GOLD],
+      ['点券', K_COUPON],
+      ['钻石', K_DIAMOND],
+      ['金豆', K_BEAN],
+    ].forEach(function (pair) {
+      valueRow('显示' + pair[0], cfgGet(pair[1], '1') === '1' ? '开' : '关', function () {
+        cfgSet(pair[1], cfgGet(pair[1], '1') === '1' ? '0' : '1');
+        draw();
+        table.reload();
+      });
     });
     valueRow('显示今日统计', cfgGet(K_TODAY, '1') === '1' ? '开' : '关', function () {
       cfgSet(K_TODAY, cfgGet(K_TODAY, '1') === '1' ? '0' : '1');
@@ -742,7 +914,7 @@ async function appUI() {
     valueRow('关于', 'v' + VER, async function () {
       const a = new Alert();
       a.title = 'QQ农场小组件 v' + VER;
-      a.message = '数据来自面板接口：\nGET /api/accounts\nGET /api/status\n\n账号密码存在本机钥匙串，不会写进脚本。\n小组件每 5 分钟请求刷新一次，实际由 iOS 决定。';
+      a.message = '数据来自面板接口：\nGET /api/accounts\nGET /api/status\n\n显示的字段：等级、在线时长、金币、点券、钻石、金豆、今日收获/偷取/浇水/同气礼包。\n\n账号密码存在本机钥匙串，不会写进脚本。\n小组件每 5 分钟请求刷新一次，实际由 iOS 决定。';
       a.addAction('好');
       await a.presentAlert();
     });

@@ -1,12 +1,12 @@
 # QQ农场 · Scriptable 小组件
 
-在 iPhone 桌面看面板状态：几个账号、谁在线、等级金币、今日收偷浇水。
+在 iPhone 桌面看面板状态：几个账号、谁在线、等级、四类货币（金币/点券/钻石/金豆）、今日收偷浇水和同气礼包。
 
 三种尺寸都支持：
 
-- **小**：在线数 / 总数 + 金币合计
-- **中**：最多 4 个账号 + 在线状态 + 今日统计
-- **大**：最多 6 个账号（带金币和今日操作）+ 汇总
+- **小**：在线数 / 总数 + 金币、点券合计 + 在跑数
+- **中**：最多 4 个账号（名字 + 等级 + 各自金币）+ 点券/钻石/金豆合计 + 今日统计
+- **大**：最多 5 个账号，每个三行（状态、四类货币、今日操作）+ 汇总
 
 App 里运行脚本会打开一个设置界面（原生列表），不用改代码也能改地址、密码、标题、开关。
 
@@ -28,7 +28,7 @@ App 里运行脚本会打开一个设置界面（原生列表），不用改代�
 | 分组 | 项目 |
 |---|---|
 | 面板 | 服务器地址、用户名、密码、连接测试 |
-| 显示 | 标题、显示金币开关、显示今日统计开关 |
+| 显示 | 标题、显示金币/点券/钻石/金豆（四个独立开关）、显示今日统计 |
 | 操作 | 刷新数据、打开面板网页、关于 |
 
 点顶部标题那一块可以弹出中尺寸预览。所有值都存在本机钥匙串 / 偏好里，随手改随手生效，小组件下次刷新就用新设置。
@@ -45,6 +45,9 @@ Keychain：
 | `qqfarm_w_token` | 登录 token 缓存 |
 | `qqfarm_w_title` | 小组件标题 |
 | `qqfarm_w_gold` | 1/0 显示金币 |
+| `qqfarm_w_coupon` | 1/0 显示点券 |
+| `qqfarm_w_diamond` | 1/0 显示钻石 |
+| `qqfarm_w_bean` | 1/0 显示金豆 |
 | `qqfarm_w_today` | 1/0 显示今日统计 |
 
 不写进脚本文件，也不上传。token 失效（服务重启）时会自动重登一次。
@@ -55,9 +58,20 @@ Keychain：
 |---|---|
 | 登录换 token | `POST /api/login` |
 | 账号列表 | `GET /api/accounts`（含 `running`、`level`、`nick`） |
-| 在线状态 | `GET /api/status`（header `x-account-id`，读 `connection.connected`、`status.gold`、`operations`） |
+| 账号详情 | `GET /api/status`（header `x-account-id`） |
 
-绿点 = `running` 且 `connection.connected` 为真，也就是 WebSocket 真连上了。灰点 = 没在跑或断线。
+`/api/status` 里用到的字段：
+
+| 字段 | 含义 |
+|---|---|
+| `connection.connected` | WebSocket 是否真连上 |
+| `status.gold` / `status.coupon` / `status.diamond` / `status.goldBean` | 金币 / 点券 / 钻石 / 金豆 |
+| `status.level`、`status.exp`、`levelProgress` | 等级与经验进度 |
+| `uptime` | 本次上线时长（worker 启动至今） |
+| `operations.harvest` / `steal` / `helpWater` | 今日收获 / 偷取 / 浇水 |
+| `operations.tongQiGift` | 今日同气连枝礼包数量 |
+
+绿点 = `running` 且 `connection.connected` 为真。灰点 = 没在跑或断线。
 
 ## 踩过的坑
 

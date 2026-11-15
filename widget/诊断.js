@@ -39,6 +39,7 @@ async function call(path, opt) {
   } else {
     const h = { 'Content-Type': 'application/json' };
     if (opt.token) h['x-admin-token'] = String(opt.token);
+    if (opt.accountId) h['x-account-id'] = String(opt.accountId);
     req.headers = h;
   }
 
@@ -93,6 +94,32 @@ if (!base) {
         list.slice(0, 4).forEach(function (a) {
           out.push('  #' + a.id + ' ' + (a.nick || a.name) + (a.running ? ' 运行中' : ' 未运行'));
         });
+
+        // 顺带看一眼 /api/status 里的货币字段齐不齐
+        const running = list.filter(function (a) {
+          return a.running;
+        }).slice(0, 2);
+        for (const a of running) {
+          const s = await call('/api/status', { token: token, mode: 'once', accountId: a.id });
+          if (s.st !== 200) {
+            out.push('  #' + a.id + ' status → ' + s.st);
+            continue;
+          }
+          try {
+            const d = JSON.parse(s.text).data || {};
+            const st = d.status || {};
+            out.push(
+              '  #' + a.id + ' 金' + (st.gold || 0) +
+              ' 券' + (st.coupon || 0) +
+              ' 钻' + (st.diamond || 0) +
+              ' 豆' + (st.goldBean || 0) +
+              ' Lv' + (st.level || 0) +
+              ' 同气' + ((d.operations && d.operations.tongQiGift) || 0)
+            );
+          } catch (e) {
+            out.push('  #' + a.id + ' status 解析失败');
+          }
+        }
       } catch (e) {}
     }
   }
