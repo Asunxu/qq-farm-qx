@@ -81,6 +81,17 @@ req.headers = h;                         // ✅
 - `Font.regularMonospacedSystemFont` / `boldMonospacedSystemFont`
 - `Font.fontWithName(name, size)`
 
+**`Color.secondaryLabel()` 不一定存在。** 老版本 Scriptable 只给基础色（`Color.red()` / `Color.green()`），`secondaryLabel` 一调就 `TypeError: Color.secondaryLabel is not a function`。所以脚本里没有直接调，而是走 `sysColor()`：按名字逐个试，全都没有就按深浅色模式退回手写 hex。
+
+## 更新到最新版
+
+手机 Safari 打开下面任一个，全选复制，回 Scriptable 粘进脚本（整份替换），名字保持 `QQ农场`：
+
+- GitHub：`https://raw.githubusercontent.com/Asunxu/qq-farm-qx/main/widget/qqfarm-widget.js`
+- 面板备用：`https://<你的面板地址>/qqfarm-widget.txt`
+
+粘完直接运行一次，能进设置界面就说明版本对了。
+
 ## 注意
 
 - **只有 IPv6 的面板**：手机得连有 IPv6 的 Wi-Fi，蜂窝数据大概率不通。连不上时小组件显示「连不上面板」。
