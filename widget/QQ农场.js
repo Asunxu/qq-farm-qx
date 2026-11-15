@@ -25,6 +25,7 @@ const K_COUPON = 'qqfarm_w_coupon';
 const K_DIAMOND = 'qqfarm_w_diamond';
 const K_BEAN = 'qqfarm_w_bean';
 const K_TODAY = 'qqfarm_w_today';
+const K_FAM = 'qqfarm_w_family'; // 记住上次渲染的尺寸，刷新时按同样尺寸回推，避免尺寸错乱
 
 // ============ 配色 ============
 const C = {
@@ -498,7 +499,8 @@ function buildToday(w, data) {
   u.textOpacity = 0.55;
 
   // 「↻ 刷新」是可点的：WidgetText.url 支持中/大尺寸里单独点某个文字，
-  // 点它会用 URL scheme 拉起脚本并带 action=refresh，脚本只重取数据、不弹设置。
+  // 点它会用 URL scheme 拉起脚本并带 action=refresh；脚本拉完数据后
+  // setWidget + App.close()，App 闪一下自动回桌面，不停在前台。
   const bar = s.addText('  │  ');
   bar.font = font(9, 'plain');
   bar.textColor = new Color(C.dim);
@@ -794,7 +796,7 @@ function renderError(msg, family) {
 }
 
 // ============ App 内设置界面 ============
-const VER = '1.3';
+const VER = '1.4';
 
 function loadCfg() {
   BASE = String(cfgGet(K_BASE, '') || '').replace(/\/+$/, '');
@@ -1016,13 +1018,18 @@ async function appUI() {
 }
 
 // ============ 脚本入口 ============
-// 点小组件上的「↻ 刷新」会以 ?action=refresh 拉起脚本：
-// 只重取数据并把预览推出来，不进设置界面。
+// 点小组件上的「↻ 刷新」会以 ?action=refresh 拉起脚本。
+// 这里只做三件事：取数 → setWidget 把同尺寸小组件更新掉 → complete 退出。
+// 关键：全程不调用任何 UI（Alert / presentMedium 都会把 Scriptable 留在前台），
+// 这样点完只是 App 闪一下、随即自动回到桌面，小组件已经变成新数据。
 async function quickRefresh() {
   if (!(BASE && USER && PASS)) {
+    // 还没配置，只能进设置界面，否则无数据可刷
     await appUI();
     return;
   }
+  const family = String(cfgGet(K_FAM, 'medium') || 'medium');
+
   let data = null;
   let err = null;
   try {
@@ -1030,19 +1037,24 @@ async function quickRefresh() {
   } catch (e) {
     err = e;
   }
-  if (err) {
-    const a = new Alert();
-    a.title = '刷新失败';
-    a.message = String((err && err.message) || err);
-    a.addAction('打开设置');
-    a.addCancelAction('关闭');
-    if ((await a.presentAlert()) === 0) await appUI();
-    return;
-  }
-  const w = render(data, 'medium');
+
+  let w;
+  if (err) w = renderError(String((err && err.message) || err), family);
+  else w = render(data, family);
+  w.url = BASE;
+  if (!err) w.refreshAfterDate = new Date(Date.now() + 3 * 60 * 1000);
+
   try {
-    await w.presentMedium();
+    Script.setWidget(w); // 直接覆盖当前小组件，不弹预览
   } catch (e) {}
+  // 关键：主动关掉 App，回到桌面。
+  // iOS 不允许第三方小组件被点击时不启动 App，所以「完全零跳转」做不到；
+  // 但加上 App.close() 后是「闪一下自动回桌面」，不会停在 Scriptable 里。
+  // 注意顺序：先 close 再 complete，否则 complete 之后脚本可能被挂起，close 就执行不到了。
+  try {
+    App.close();
+  } catch (e) {}
+  Script.complete();
 }
 
 async function main() {
@@ -1087,6 +1099,9 @@ async function main() {
   else w = render(data, family);
   w.url = BASE;
   if (!err) w.refreshAfterDate = new Date(Date.now() + 5 * 60 * 1000);
+  try {
+    cfgSet(K_FAM, family); // 记下这次是哪个尺寸，刷新时按同尺寸回推
+  } catch (e) {}
   Script.setWidget(w);
   Script.complete();
 }
