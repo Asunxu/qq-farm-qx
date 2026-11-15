@@ -65,6 +65,24 @@ function uiGreen() {
   return sysColor(['systemGreen', 'green'], '#32D74B', '#34C759');
 }
 
+// 字体同理：不同版本暴露的静态方法不同（有的没有 fontWithName、
+// 有的没有 *Monospaced*），这里按优先级逐个试，最后一定退回 systemFont。
+function font(size, kind) {
+  const chain = {
+    plain: ['systemFont'],
+    semibold: ['semiboldSystemFont', 'boldSystemFont', 'systemFont'],
+    bold: ['boldSystemFont', 'semiboldSystemFont', 'systemFont'],
+    mono: ['regularMonospacedSystemFont', 'systemFont'],
+    boldMono: ['boldMonospacedSystemFont', 'boldSystemFont', 'regularMonospacedSystemFont', 'systemFont'],
+  }[kind] || ['systemFont'];
+  for (let i = 0; i < chain.length; i++) {
+    try {
+      if (typeof Font[chain[i]] === 'function') return Font[chain[i]](size);
+    } catch (e) {}
+  }
+  return Font.systemFont(size);
+}
+
 const MAX_STATUS = 6; // 最多并发查询几个在跑账号的详细状态
 
 // ============ 钥匙串读写 ============
@@ -288,18 +306,18 @@ function buildHeader(w, data) {
   addIcon(h, 12);
   h.addSpacer(5);
   const t = h.addText(cfgGet(K_TITLE, 'QQ农场'));
-  t.font = Font.semiboldSystemFont(13);
+  t.font = font(13, 'semibold');
   t.textColor = new Color(C.title);
   t.lineLimit = 1;
   h.addSpacer();
 
   const live = data.online > 0;
   const dot = h.addText('●');
-  dot.font = Font.systemFont(10);
+  dot.font = font(10, 'plain');
   dot.textColor = new Color(live ? C.online : C.offline);
   h.addSpacer(3);
   const num = h.addText(data.online + '/' + data.total);
-  num.font = Font.regularMonospacedSystemFont(12);
+  num.font = font(12, 'mono');
   num.textColor = new Color(live ? C.online : C.sub);
 }
 
@@ -308,12 +326,12 @@ function buildAccountRow(w, acc) {
   row.centerAlignContent();
 
   const dot = row.addText('●');
-  dot.font = Font.systemFont(9);
+  dot.font = font(9, 'plain');
   dot.textColor = new Color(acc.connected ? C.online : C.offline);
   row.addSpacer(5);
 
   const n = row.addText(acc.name);
-  n.font = Font.semiboldSystemFont(13);
+  n.font = font(13, 'semibold');
   n.textColor = new Color(acc.running ? C.name : C.dim);
   n.lineLimit = 1;
 
@@ -321,7 +339,7 @@ function buildAccountRow(w, acc) {
 
   if (acc.level) {
     const lv = row.addText('Lv' + acc.level);
-    lv.font = Font.regularMonospacedSystemFont(11);
+    lv.font = font(11, 'mono');
     lv.textColor = new Color(C.accent);
     lv.lineLimit = 1;
   }
@@ -341,7 +359,7 @@ function buildAccountRow(w, acc) {
     color = acc.note ? C.warn : C.sub;
   }
   const r = row.addText(right);
-  r.font = Font.systemFont(11);
+  r.font = font(11, 'plain');
   r.textColor = new Color(color);
   r.lineLimit = 1;
 }
@@ -374,7 +392,7 @@ function buildAccountSub(w, acc) {
   }
 
   const t = s.addText(parts.join(' · '));
-  t.font = Font.systemFont(11);
+  t.font = font(11, 'plain');
   t.textColor = new Color(C.sub);
   t.lineLimit = 1;
   t.textOpacity = 0.85;
@@ -390,14 +408,14 @@ function buildToday(w, data) {
     if (data.today.water) bits.push('水 ' + data.today.water);
     const label = bits.length ? '今日 ' + bits.join('  ') : '今日暂无操作';
     const t = s.addText(label);
-    t.font = Font.systemFont(10);
+    t.font = font(10, 'plain');
     t.textColor = new Color(C.sub);
     t.textOpacity = 0.75;
     t.lineLimit = 1;
   }
   s.addSpacer();
   const u = s.addText(fmtTime(data.updatedAt) + ' 更新');
-  u.font = Font.fontWithName('Menlo', 9) || Font.systemFont(9);
+  u.font = font(9, 'mono');
   u.textColor = new Color(C.sub);
   u.textOpacity = 0.55;
 }
@@ -408,7 +426,7 @@ function buildSmall(w, data) {
   addIcon(head, 12);
   head.addSpacer(5);
   const t = head.addText(cfgGet(K_TITLE, 'QQ农场'));
-  t.font = Font.semiboldSystemFont(12);
+  t.font = font(12, 'semibold');
   t.textColor = new Color(C.title);
   t.lineLimit = 1;
 
@@ -417,11 +435,11 @@ function buildSmall(w, data) {
   const num = w.addStack();
   num.centerAlignContent();
   const big = num.addText(String(data.online));
-  big.font = Font.boldMonospacedSystemFont(30);
+  big.font = font(30, 'boldMono');
   big.textColor = new Color(data.online > 0 ? C.online : C.offline);
   num.addSpacer(3);
   const of = num.addText('/ ' + data.total);
-  of.font = Font.regularMonospacedSystemFont(14);
+  of.font = font(14, 'mono');
   of.textColor = new Color(C.sub);
   num.addSpacer(4);
 
@@ -430,15 +448,15 @@ function buildSmall(w, data) {
     const info = w.addStack();
     info.centerAlignContent();
     const n = info.addText(one.name);
-    n.font = Font.semiboldSystemFont(12);
+    n.font = font(12, 'semibold');
     n.textColor = new Color(C.name);
     n.lineLimit = 1;
     const lv = info.addText(one.level ? '  Lv' + one.level : '');
-    lv.font = Font.regularMonospacedSystemFont(10);
+    lv.font = font(10, 'mono');
     lv.textColor = new Color(C.accent);
   } else {
     const lab = w.addText(data.total === 0 ? '暂无账号' : (data.online > 0 ? '账号在线' : '全部离线'));
-    lab.font = Font.systemFont(11);
+    lab.font = font(11, 'plain');
     lab.textColor = new Color(C.sub);
   }
 
@@ -447,12 +465,12 @@ function buildSmall(w, data) {
   const foot = w.addStack();
   foot.centerAlignContent();
   const g = foot.addText(showGold() && data.goldTotal ? fmtGold(data.goldTotal) + '金' : (data.running + ' 个在跑'));
-  g.font = Font.systemFont(11);
+  g.font = font(11, 'plain');
   g.textColor = new Color(data.goldTotal ? C.gold : C.sub);
   g.lineLimit = 1;
   foot.addSpacer();
   const u = foot.addText(fmtTime(data.updatedAt));
-  u.font = Font.systemFont(9);
+  u.font = font(9, 'plain');
   u.textColor = new Color(C.sub);
   u.textOpacity = 0.5;
 }
@@ -466,7 +484,7 @@ function buildMedium(w, data) {
   const list = data.accounts.slice(0, compact ? 4 : 2);
   if (!list.length) {
     const e = w.addText('面板上还没有账号');
-    e.font = Font.systemFont(12);
+    e.font = font(12, 'plain');
     e.textColor = new Color(C.sub);
   }
 
@@ -483,7 +501,7 @@ function buildMedium(w, data) {
   if (data.accounts.length > list.length) {
     w.addSpacer(3);
     const more = w.addText('还有 ' + (data.accounts.length - list.length) + ' 个账号');
-    more.font = Font.systemFont(10);
+    more.font = font(10, 'plain');
     more.textColor = new Color(C.dim);
   }
 
@@ -506,7 +524,7 @@ function buildLarge(w, data) {
   if (data.accounts.length > list.length) {
     w.addSpacer(4);
     const more = w.addText('还有 ' + (data.accounts.length - list.length) + ' 个账号未显示');
-    more.font = Font.systemFont(10);
+    more.font = font(10, 'plain');
     more.textColor = new Color(C.dim);
   }
 
@@ -515,11 +533,11 @@ function buildLarge(w, data) {
   const sum = w.addStack();
   sum.centerAlignContent();
   const a = sum.addText(data.running + ' 个在跑 · ' + data.online + ' 个在线');
-  a.font = Font.semiboldSystemFont(11);
+  a.font = font(11, 'semibold');
   a.textColor = new Color(C.accent);
   sum.addSpacer();
   const g = sum.addText(showGold() && data.goldTotal ? fmtGold(data.goldTotal) + '金' : '');
-  g.font = Font.fontWithName('Menlo', 11) || Font.systemFont(11);
+  g.font = font(11, 'mono');
   g.textColor = new Color(C.gold);
 
   w.addSpacer(4);
@@ -532,17 +550,17 @@ function buildError(w, msg) {
   addIcon(head, 12);
   head.addSpacer(5);
   const t = head.addText(cfgGet(K_TITLE, 'QQ农场'));
-  t.font = Font.semiboldSystemFont(13);
+  t.font = font(13, 'semibold');
   t.textColor = new Color(C.title);
 
   w.addSpacer();
   const e = w.addText(String(msg || '读取失败'));
-  e.font = Font.systemFont(12);
+  e.font = font(12, 'plain');
   e.textColor = new Color(C.warn);
   e.lineLimit = 3;
   w.addSpacer(4);
   const hint = w.addText('点开小组件运行一次可修改配置');
-  hint.font = Font.systemFont(10);
+  hint.font = font(10, 'plain');
   hint.textColor = new Color(C.sub);
   hint.textOpacity = 0.8;
   w.addSpacer();
@@ -550,11 +568,19 @@ function buildError(w, msg) {
 
 function newWidget() {
   const w = new ListWidget();
-  const g = new LinearGradient();
-  g.colors = [new Color(C.bg1), new Color(C.bg2)];
-  g.locations = [0, 1];
-  w.backgroundGradient = g;
-  w.setPadding(14, 14, 12, 14);
+  try {
+    const g = new LinearGradient();
+    g.colors = [new Color(C.bg1), new Color(C.bg2)];
+    g.locations = [0, 1];
+    w.backgroundGradient = g;
+  } catch (e) {
+    try {
+      w.backgroundColor = new Color(C.bg1);
+    } catch (e2) {}
+  }
+  try {
+    w.setPadding(14, 14, 12, 14);
+  } catch (e) {}
   return w;
 }
 
@@ -605,7 +631,7 @@ async function appUI() {
     const r = new UITableRow();
     r.height = 36;
     const c = r.addText(title);
-    c.titleFont = Font.semiboldSystemFont(12);
+    c.titleFont = font(12, 'semibold');
     c.titleColor = uiSub();
     r.dismissOnSelect = false;
     table.addRow(r);
@@ -615,10 +641,10 @@ async function appUI() {
     const r = new UITableRow();
     r.height = 52;
     const a = r.addText(String(title));
-    a.titleFont = Font.systemFont(16);
+    a.titleFont = font(16, 'plain');
     a.widthWeight = weight || 38;
     const b = r.addText(String(value === undefined || value === null ? '' : value));
-    b.titleFont = Font.systemFont(15);
+    b.titleFont = font(15, 'plain');
     b.titleColor = color || uiSub();
     b.widthWeight = 62;
     // 不同 Scriptable 版本这里的方法名不一致，兜一下
@@ -641,8 +667,8 @@ async function appUI() {
         ? (data.online + '/' + data.total + ' 在线 · ' + data.running + ' 个在跑'
           + (data.total ? ' · ' + fmtGold(data.goldTotal) + '金' : ''))
         : (err ? '连接失败' : '未配置面板'));
-    hc.titleFont = Font.boldSystemFont(24);
-    hc.subtitleFont = Font.systemFont(13);
+    hc.titleFont = font(24, 'bold');
+    hc.subtitleFont = font(13, 'plain');
     hc.subtitleColor = err ? uiRed() : uiSub();
     head.dismissOnSelect = false;
     if (data) {

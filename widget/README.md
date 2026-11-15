@@ -83,6 +83,8 @@ req.headers = h;                         // ✅
 
 **`Color.secondaryLabel()` 不一定存在。** 老版本 Scriptable 只给基础色（`Color.red()` / `Color.green()`），`secondaryLabel` 一调就 `TypeError: Color.secondaryLabel is not a function`。所以脚本里没有直接调，而是走 `sysColor()`：按名字逐个试，全都没有就按深浅色模式退回手写 hex。
 
+**字体也别直接点名。** 有的版本没有 `Font.fontWithName`、也没有 `*Monospaced*` 系列。脚本里统一走 `font(size, kind)`，按 `semibold` / `bold` / `mono` / `boldMono` 的候选链逐个试，最后退回 `Font.systemFont`，不会再因为字体名字报错。
+
 ## 更新到最新版
 
 手机 Safari 打开下面任一个，全选复制，回 Scriptable 粘进脚本（整份替换），名字保持 `QQ农场`：
