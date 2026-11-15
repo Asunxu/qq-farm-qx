@@ -102,6 +102,17 @@ function refreshUrl() {
   }
 }
 
+// 秒级等待：Timer 是核心 API，比 setTimeout 更保险。
+function sleep(sec) {
+  return new Promise((resolve) => {
+    try {
+      Timer.schedule(sec, false, () => resolve());
+    } catch (e) {
+      resolve();
+    }
+  });
+}
+
 // ============ 钥匙串读写 ============
 function cfgGet(k, fb) {
   try {
@@ -318,7 +329,7 @@ async function fetchData() {
     }
   });
 
-  return {
+  const out = {
     total: list.length,
     online: online,
     running: list.filter(function (x) {
@@ -334,6 +345,41 @@ async function fetchData() {
     gainCouponTotal: gainCouponTotal,
     updatedAt: Date.now(),
   };
+  cacheSave(out); // 留一份快照，网络抽风时组件不至于空白
+  return out;
+}
+
+// ============ 快照缓存 ============
+// 小组件扩展的执行时间很紧（网络一慢就被系统掐掉，桌面就停在旧画面）。
+// 所以每次成功取数都存一份 JSON 快照；渲染时网络失败就回退到快照。
+function cachePath() {
+  try {
+    const fm = FileManager.local();
+    return fm.joinPath(fm.documentsDirectory(), 'qqfarm-snapshot.json');
+  } catch (e) {
+    return null;
+  }
+}
+function cacheSave(data) {
+  try {
+    const p = cachePath();
+    if (!p) return;
+    FileManager.local().writeString(p, JSON.stringify(data));
+  } catch (e) {}
+}
+function cacheLoad() {
+  try {
+    const p = cachePath();
+    if (!p) return null;
+    const fm = FileManager.local();
+    if (!fm.fileExists(p)) return null;
+    const d = JSON.parse(fm.readString(p));
+    if (!d || !d.accounts || !d.updatedAt) return null;
+    if (Date.now() - Number(d.updatedAt) > 24 * 3600 * 1000) return null; // 超过一天就不用了
+    return d;
+  } catch (e) {
+    return null;
+  }
 }
 
 // ============ 渲染 ============
@@ -484,7 +530,7 @@ function buildToday(w, data) {
     const bits = [];
     if (data.today.harvest) bits.push('收 ' + data.today.harvest);
     if (data.today.stealth) bits.push('偷 ' + data.today.stealth);
-    if (data.today.gift) bits.push('同气 ' + data.today.gift);
+    if (data.today.gift) bits.push('同气礼包 ' + data.today.gift);
     const label = bits.length ? '今日 ' + bits.join('  ') : '今日暂无操作';
     const t = s.addText(label);
     t.font = font(10, 'plain');
@@ -796,7 +842,7 @@ function renderError(msg, family) {
 }
 
 // ============ App 内设置界面 ============
-const VER = '1.4';
+const VER = '1.5';
 
 function loadCfg() {
   BASE = String(cfgGet(K_BASE, '') || '').replace(/\/+$/, '');
@@ -1037,22 +1083,34 @@ async function quickRefresh() {
   } catch (e) {
     err = e;
   }
+  if (err) {
+    // 取数失败就用上次的快照，至少还能看到「上次是什么时候的数据」
+    const c = cacheLoad();
+    if (c) {
+      data = c;
+      err = null;
+    }
+  }
 
   let w;
   if (err) w = renderError(String((err && err.message) || err), family);
   else w = render(data, family);
   w.url = BASE;
-  if (!err) w.refreshAfterDate = new Date(Date.now() + 3 * 60 * 1000);
+  // 刷新后 90 秒再让系统重载一次：万一这次桌面没重绘，扩展自己重跑一遍就正了
+  if (!err) w.refreshAfterDate = new Date(Date.now() + 90 * 1000);
 
+  // 关键：推给系统之后必须留一点时间让它落盘/重绘。
+  // 上一版是 setWidget 完立刻 App.close()，写入被打断 → 桌面组件还是旧数据，时间不变。
   try {
     Script.setWidget(w); // 直接覆盖当前小组件，不弹预览
   } catch (e) {}
-  // 关键：主动关掉 App，回到桌面。
-  // iOS 不允许第三方小组件被点击时不启动 App，所以「完全零跳转」做不到；
-  // 但加上 App.close() 后是「闪一下自动回桌面」，不会停在 Scriptable 里。
-  // 注意顺序：先 close 再 complete，否则 complete 之后脚本可能被挂起，close 就执行不到了。
+  await sleep(0.8);
   try {
-    App.close();
+    Script.setWidget(w); // 二次推送，相当于再喊一次 "去重绘"
+  } catch (e) {}
+  await sleep(0.2);
+  try {
+    App.close(); // 主动关掉自己，回到桌面
   } catch (e) {}
   Script.complete();
 }
@@ -1092,6 +1150,14 @@ async function main() {
     data = await fetchData();
   } catch (e) {
     err = e;
+  }
+  if (err) {
+    // 组件扩展时间有限，网络慢会被系统掐掉：回退到快照，别让桌面变空白/报错
+    const c = cacheLoad();
+    if (c) {
+      data = c;
+      err = null;
+    }
   }
 
   let w;
