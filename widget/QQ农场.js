@@ -91,6 +91,16 @@ function font(size, kind) {
 
 const MAX_STATUS = 6; // 最多并发查询几个在跑账号的详细状态
 
+// 点「↻ 刷新」时用的 URL：拉起本脚本并带上 action=refresh。
+// Scriptable 会把 URL 的 query 放进 args.queryParameters。
+function refreshUrl() {
+  try {
+    return 'scriptable:///run/' + encodeURIComponent(Script.name()) + '?action=refresh';
+  } catch (e) {
+    return 'scriptable:///run/' + encodeURIComponent('QQ农场') + '?action=refresh';
+  }
+}
+
 // ============ 钥匙串读写 ============
 function cfgGet(k, fb) {
   try {
@@ -489,6 +499,20 @@ function buildToday(w, data) {
   u.font = font(9, 'mono');
   u.textColor = new Color(C.sub);
   u.textOpacity = 0.55;
+
+  // 「↻ 刷新」是可点的：WidgetText.url 支持中/大尺寸里单独点某个文字，
+  // 点它会用 URL scheme 拉起脚本并带 action=refresh，脚本只重取数据、不弹设置。
+  const bar = s.addText('  │  ');
+  bar.font = font(9, 'plain');
+  bar.textColor = new Color(C.dim);
+  bar.textOpacity = 0.5;
+  const rf = s.addText('↻ 刷新');
+  rf.font = font(9, 'plain');
+  rf.textColor = new Color(C.accent);
+  rf.textOpacity = 0.9;
+  try {
+    rf.url = refreshUrl();
+  } catch (e) {}
 }
 
 function buildSmall(w, data) {
@@ -569,8 +593,10 @@ function buildMedium(w, data) {
   buildHeader(w, data);
   w.addSpacer(4);
 
-  // 中尺寸一行一个账号，右侧放金币；点券/钻石/金豆合计放底部一行
-  const list = data.accounts.slice(0, 4);
+  // 中尺寸：每个账号占两行——状态行 + 它自己的货币行。
+  // 各账号的数据各显示各的，不做合计（合计只在大尺寸底部出现）。
+  // 高度预算：标题 16 + 4 + 3×(17+11+2) + 页脚 12 ≈ 145pt，中尺寸放得下 3 个。
+  const list = data.accounts.slice(0, 3);
   if (!list.length) {
     const e = w.addText('面板上还没有账号');
     e.font = font(12, 'plain');
@@ -579,85 +605,53 @@ function buildMedium(w, data) {
 
   list.forEach(function (acc, i) {
     if (i > 0) w.addSpacer(3);
-    buildAccountRowGold(w, acc);
+    buildAccountRow(w, acc);
+    w.addSpacer(1);
+    buildOwnCurrencyRow(w, acc);
   });
 
   if (data.accounts.length > list.length) {
     w.addSpacer(3);
-    const more = w.addText('还有 ' + (data.accounts.length - list.length) + ' 个账号 · 大尺寸全显示');
+    const more = w.addText('还有 ' + (data.accounts.length - list.length) + ' 个 · 大尺寸看全部');
     more.font = font(10, 'plain');
     more.textColor = new Color(C.dim);
     more.lineLimit = 1;
   }
 
   w.addSpacer();
-  const totals = currencyList(
-    { gold: data.goldTotal, coupon: data.couponTotal, diamond: data.diamondTotal, goldBean: data.beanTotal },
-    4
-  );
-  if (totals.length) {
-    const s = w.addStack();
-    s.centerAlignContent();
-    totals.forEach(function (it, i) {
-      if (i > 0) {
-        const sep = s.addText(' · ');
-        sep.font = font(9, 'plain');
-        sep.textColor = new Color(C.dim);
-      }
-      const t = s.addText(it.k + ' ' + it.v);
-      t.font = font(10, 'plain');
-      t.textColor = new Color(it.c);
-      t.lineLimit = 1;
-    });
-    w.addSpacer(2);
-  }
   buildToday(w, data);
 }
 
-// 中尺寸用的紧凑行：左边名字+等级，右边金币
-function buildAccountRowGold(w, acc) {
-  const row = w.addStack();
-  row.centerAlignContent();
+// 单个账号自己的四项货币（不汇总），宽度不够时自动缩字号，不截断
+function buildOwnCurrencyRow(w, acc) {
+  const items = currencyList(acc);
+  const s = w.addStack();
+  s.centerAlignContent();
+  s.addSpacer(14);
 
-  const dot = row.addText('●');
-  dot.font = font(9, 'plain');
-  dot.textColor = new Color(acc.connected ? C.online : C.offline);
-  row.addSpacer(5);
-
-  const n = row.addText(acc.name);
-  n.font = font(13, 'semibold');
-  n.textColor = new Color(acc.running ? C.name : C.dim);
-  n.lineLimit = 1;
-
-  row.addSpacer(6);
-
-  if (acc.level) {
-    const lv = row.addText('Lv' + acc.level);
-    lv.font = font(11, 'mono');
-    lv.textColor = new Color(C.accent);
-    lv.lineLimit = 1;
+  if (!items.length) {
+    const t = s.addText(acc.running ? '暂无货币数据' : '未运行');
+    t.font = font(10, 'plain');
+    t.textColor = new Color(C.dim);
+    t.lineLimit = 1;
+    return;
   }
 
-  row.addSpacer();
-
-  let right = '';
-  let color = C.sub;
-  if (showGold() && acc.gold) {
-    right = fmtGold(acc.gold);
-    color = C.gold;
-  } else if (!acc.running) {
-    right = '未运行';
-    color = C.dim;
-  } else if (!acc.connected) {
-    right = acc.note ? '异常' : '连接中';
-    color = acc.note ? C.warn : C.sub;
-  } else {
-    right = '在线';
-  }
-  const r = row.addText(right);
-  r.font = font(12, 'plain');
-  r.textColor = new Color(color);
-  r.lineLimit = 1;
+  items.forEach(function (it, i) {
+    if (i > 0) {
+      const sep = s.addText(' · ');
+      sep.font = font(9, 'plain');
+      sep.textColor = new Color(C.dim);
+      sep.textOpacity = 0.8;
+    }
+    const t = s.addText(it.k + ' ' + it.v);
+    t.font = font(10, 'plain');
+    t.textColor = new Color(it.c);
+    t.lineLimit = 1;
+    try {
+      t.minimumScaleFactor = 0.75;
+    } catch (e) {}
+  });
 }
 
 function buildLarge(w, data) {
@@ -763,7 +757,7 @@ function renderError(msg, family) {
 }
 
 // ============ App 内设置界面 ============
-const VER = '1.1';
+const VER = '1.2';
 
 function loadCfg() {
   BASE = String(cfgGet(K_BASE, '') || '').replace(/\/+$/, '');
@@ -786,185 +780,251 @@ async function editField(title, current, secure) {
 async function appUI() {
   let data = null;
   let err = '';
-  let note = '';
 
-  const table = new UITable();
-  table.showSeparators = false;
-
-  function sectionRow(title) {
-    const r = new UITableRow();
-    r.height = 36;
-    const c = r.addText(title);
-    c.titleFont = font(12, 'semibold');
-    c.titleColor = uiSub();
-    r.dismissOnSelect = false;
-    table.addRow(r);
-  }
-
-  function valueRow(title, value, onSelect, color, weight) {
-    const r = new UITableRow();
-    r.height = 52;
-    const a = r.addText(String(title));
-    a.titleFont = font(16, 'plain');
-    a.widthWeight = weight || 38;
-    const b = r.addText(String(value === undefined || value === null ? '' : value));
-    b.titleFont = font(15, 'plain');
-    b.titleColor = color || uiSub();
-    b.widthWeight = 62;
-    // 不同 Scriptable 版本这里的方法名不一致，兜一下
+  async function load() {
     try {
-      b.rightAligned();
-    } catch (e) {}
-    r.dismissOnSelect = false;
-    if (onSelect) r.didSelect = onSelect;
-    table.addRow(r);
-    return r;
+      data = await fetchData();
+      err = '';
+    } catch (e) {
+      data = null;
+      err = String((e && e.message) || e);
+    }
   }
 
-  function draw() {
-    table.removeAllRows();
+  function onOff(k) {
+    return cfgGet(k, '1') === '1' ? '开' : '关';
+  }
 
-    const head = new UITableRow();
-    head.height = 92;
-    const hc = head.addText(cfgGet(K_TITLE, 'QQ农场'),
-      data
-        ? (data.online + '/' + data.total + ' 在线 · ' + data.running + ' 个在跑'
-          + (data.goldTotal ? ' · 金 ' + fmtGold(data.goldTotal) : '')
-          + (data.couponTotal ? ' · 券 ' + fmtGold(data.couponTotal) : ''))
-        : (err ? '连接失败' : '未配置面板'));
-    hc.titleFont = font(24, 'bold');
-    hc.subtitleFont = font(13, 'plain');
-    hc.subtitleColor = err ? uiRed() : uiSub();
-    head.dismissOnSelect = false;
-    if (data) {
-      head.didSelect = async function () {
-        const w = render(data, 'medium');
-        await w.presentMedium();
-      };
+  function shortBase() {
+    return String(BASE || '').replace(/^https?:\/\//, '') || '未填写';
+  }
+
+  function summary() {
+    const out = [];
+    if (err) {
+      out.push('✕ ' + err);
+    } else if (data) {
+      out.push(data.online + '/' + data.total + ' 在线 · ' + data.running + ' 个在跑');
+      const bits = [];
+      if (showGold() && data.goldTotal) bits.push('金 ' + fmtGold(data.goldTotal));
+      if (showCoupon() && data.couponTotal) bits.push('券 ' + fmtGold(data.couponTotal));
+      if (showDiamond() && data.diamondTotal) bits.push('钻 ' + fmtGold(data.diamondTotal));
+      if (showBean() && data.beanTotal) bits.push('豆 ' + fmtGold(data.beanTotal));
+      if (bits.length) out.push(bits.join(' · '));
+      out.push('更新于 ' + fmtTime(data.updatedAt));
+    } else {
+      out.push('还没读到数据，下面点「刷新数据」');
     }
-    table.addRow(head);
+    out.push('v' + VER);
+    return out.join('\n');
+  }
 
-    sectionRow('面板');
-    valueRow('服务器地址', BASE || '点此填写', async function () {
-      const v = await editField('面板地址', BASE, false);
-      if (v === null) return;
-      cfgSet(K_BASE, String(v).trim().replace(/\/+$/, ''));
-      cfgSet(K_TOKEN, '');
-      loadCfg();
-      await refresh();
-    });
-    valueRow('用户名', USER || '点此填写', async function () {
-      const v = await editField('用户名', USER, false);
-      if (v === null || !String(v).trim()) return;
-      cfgSet(K_USER, String(v).trim());
-      cfgSet(K_TOKEN, '');
-      loadCfg();
-      await refresh();
-    });
-    valueRow('密码', PASS ? '••••••' : '点此填写', async function () {
-      const v = await editField('密码', PASS, true);
-      if (v === null || !v) return;
-      cfgSet(K_PASS, v);
-      cfgSet(K_TOKEN, '');
-      loadCfg();
-      await refresh();
-    });
-    valueRow(
-      '连接测试',
-      note || (err ? '失败 · 点此重试' : (data ? '正常' : '点此测试')),
-      async function () {
-        await refresh();
+  if (!(BASE && USER && PASS)) {
+    const a0 = new Alert();
+    a0.title = '先填面板信息';
+    a0.message = '面板地址、用户名、密码都存在本机钥匙串，不会写进脚本。';
+    a0.addAction('开始填写');
+    a0.addCancelAction('稍后');
+    if ((await a0.presentAlert()) !== 0) return;
+  }
+
+  await load();
+
+  while (true) {
+    const a = new Alert();
+    a.title = cfgGet(K_TITLE, 'QQ农场');
+    a.message = summary();
+
+    const items = [
+      {
+        t: '面板地址 · ' + shortBase(),
+        f: async function () {
+          const v = await editField('面板地址', BASE, false);
+          if (v === null) return false;
+          cfgSet(K_BASE, String(v).trim().replace(/\/+$/, ''));
+          cfgSet(K_TOKEN, '');
+          return true;
+        },
       },
-      err ? uiRed() : (data ? uiGreen() : uiSub())
-    );
+      {
+        t: '用户名 · ' + (USER || '未填写'),
+        f: async function () {
+          const v = await editField('用户名', USER, false);
+          if (v === null || !String(v).trim()) return false;
+          cfgSet(K_USER, String(v).trim());
+          cfgSet(K_TOKEN, '');
+          return true;
+        },
+      },
+      {
+        t: '密码 · ' + (PASS ? '已设置' : '未填写'),
+        f: async function () {
+          const v = await editField('密码', PASS, true);
+          if (v === null || !v) return false;
+          cfgSet(K_PASS, v);
+          cfgSet(K_TOKEN, '');
+          return true;
+        },
+      },
+      {
+        t: '连接测试 · ' + (err ? '失败' : (data ? '正常' : '未测')),
+        f: async function () {
+          await load();
+          return false;
+        },
+      },
+      {
+        t: '显示金币 · ' + onOff(K_GOLD),
+        f: function () {
+          cfgSet(K_GOLD, cfgGet(K_GOLD, '1') === '1' ? '0' : '1');
+          return false;
+        },
+      },
+      {
+        t: '显示点券 · ' + onOff(K_COUPON),
+        f: function () {
+          cfgSet(K_COUPON, cfgGet(K_COUPON, '1') === '1' ? '0' : '1');
+          return false;
+        },
+      },
+      {
+        t: '显示钻石 · ' + onOff(K_DIAMOND),
+        f: function () {
+          cfgSet(K_DIAMOND, cfgGet(K_DIAMOND, '1') === '1' ? '0' : '1');
+          return false;
+        },
+      },
+      {
+        t: '显示金豆 · ' + onOff(K_BEAN),
+        f: function () {
+          cfgSet(K_BEAN, cfgGet(K_BEAN, '1') === '1' ? '0' : '1');
+          return false;
+        },
+      },
+      {
+        t: '显示今日统计 · ' + onOff(K_TODAY),
+        f: function () {
+          cfgSet(K_TODAY, cfgGet(K_TODAY, '1') === '1' ? '0' : '1');
+          return false;
+        },
+      },
+      {
+        t: '小组件标题 · ' + cfgGet(K_TITLE, 'QQ农场'),
+        f: async function () {
+          const v = await editField('小组件标题', cfgGet(K_TITLE, 'QQ农场'), false);
+          if (v === null || !String(v).trim()) return false;
+          cfgSet(K_TITLE, String(v).trim());
+          return false;
+        },
+      },
+      {
+        t: '预览小组件',
+        f: async function () {
+          if (!data) {
+            const e = new Alert();
+            e.title = '没有数据';
+            e.message = err || '先刷新一次';
+            e.addAction('好');
+            await e.presentAlert();
+            return false;
+          }
+          const w = render(data, 'medium');
+          await w.presentMedium();
+          return false;
+        },
+      },
+      {
+        t: '刷新数据 · ' + (data ? fmtTime(data.updatedAt) : '未读取'),
+        f: async function () {
+          await load();
+          return false;
+        },
+      },
+      {
+        t: '打开面板网页',
+        f: function () {
+          if (BASE) Safari.open(BASE);
+          return false;
+        },
+      },
+      {
+        t: '关于',
+        f: async function () {
+          const b = new Alert();
+          b.title = 'QQ农场小组件 v' + VER;
+          b.message = '数据来自面板接口：\nGET /api/accounts\nGET /api/status\n\n'
+            + '每位账号显示：等级、在线时长、金币/点券/钻石/金豆、今日收偷浇水与同气礼包。\n\n'
+            + '小组件右下角「↻ 刷新」可点，会重新取一次数据。\n'
+            + '账号密码存在本机钥匙串，不会写进脚本。';
+          b.addAction('好');
+          await b.presentAlert();
+          return false;
+        },
+      },
+    ];
 
-    sectionRow('显示');
-    valueRow('标题', cfgGet(K_TITLE, 'QQ农场'), async function () {
-      const v = await editField('小组件标题', cfgGet(K_TITLE, 'QQ农场'), false);
-      if (v === null || !String(v).trim()) return;
-      cfgSet(K_TITLE, String(v).trim());
-      draw();
-      table.reload();
+    items.forEach(function (it) {
+      a.addAction(it.t);
     });
-    [
-      ['金币', K_GOLD],
-      ['点券', K_COUPON],
-      ['钻石', K_DIAMOND],
-      ['金豆', K_BEAN],
-    ].forEach(function (pair) {
-      valueRow('显示' + pair[0], cfgGet(pair[1], '1') === '1' ? '开' : '关', function () {
-        cfgSet(pair[1], cfgGet(pair[1], '1') === '1' ? '0' : '1');
-        draw();
-        table.reload();
-      });
-    });
-    valueRow('显示今日统计', cfgGet(K_TODAY, '1') === '1' ? '开' : '关', function () {
-      cfgSet(K_TODAY, cfgGet(K_TODAY, '1') === '1' ? '0' : '1');
-      draw();
-      table.reload();
-    });
+    a.addCancelAction('关闭');
 
-    sectionRow('操作');
-    valueRow('刷新数据', data ? fmtTime(data.updatedAt) + ' 更新' : '未读取', async function () {
-      await refresh();
-    });
-    valueRow('打开面板网页', BASE ? 'Safari' : '未配置', function () {
-      if (BASE) Safari.open(BASE);
-    });
-    valueRow('关于', 'v' + VER, async function () {
-      const a = new Alert();
-      a.title = 'QQ农场小组件 v' + VER;
-      a.message = '数据来自面板接口：\nGET /api/accounts\nGET /api/status\n\n显示的字段：等级、在线时长、金币、点券、钻石、金豆、今日收获/偷取/浇水/同气礼包。\n\n账号密码存在本机钥匙串，不会写进脚本。\n小组件每 5 分钟请求刷新一次，实际由 iOS 决定。';
-      a.addAction('好');
-      await a.presentAlert();
-    });
-
-    const tail = new UITableRow();
-    tail.height = 30;
-    tail.dismissOnSelect = false;
-    table.addRow(tail);
-  }
-
-  async function refresh() {
-    note = '连接中…';
-    draw();
-    table.reload();
-    await new Promise(function (r) {
-      setTimeout(r, 60);
-    });
-    note = '';
-    try {
-      data = await fetchData();
-      err = '';
-    } catch (e) {
-      data = null;
-      err = String((e && e.message) || e);
+    const i = await a.presentAlert();
+    if (i < 0 || i >= items.length) break;
+    const changed = await items[i].f();
+    if (changed) {
+      loadCfg();
+      await load();
     }
-    draw();
-    table.reload();
   }
-
-  draw();
-  if (BASE && USER && PASS) {
-    try {
-      data = await fetchData();
-      err = '';
-    } catch (e) {
-      data = null;
-      err = String((e && e.message) || e);
-    }
-    draw();
-  }
-  await table.present();
 }
 
 // ============ 脚本入口 ============
+// 点小组件上的「↻ 刷新」会以 ?action=refresh 拉起脚本：
+// 只重取数据并把预览推出来，不进设置界面。
+async function quickRefresh() {
+  if (!(BASE && USER && PASS)) {
+    await appUI();
+    return;
+  }
+  let data = null;
+  let err = null;
+  try {
+    data = await fetchData();
+  } catch (e) {
+    err = e;
+  }
+  if (err) {
+    const a = new Alert();
+    a.title = '刷新失败';
+    a.message = String((err && err.message) || err);
+    a.addAction('打开设置');
+    a.addCancelAction('关闭');
+    if ((await a.presentAlert()) === 0) await appUI();
+    return;
+  }
+  const w = render(data, 'medium');
+  try {
+    await w.presentMedium();
+  } catch (e) {}
+}
+
 async function main() {
   loadCfg();
   const inWidget = config.runsInWidget;
   const family = inWidget ? (config.widgetFamily || 'medium') : 'medium';
 
+  let action = '';
+  try {
+    if (typeof args !== 'undefined' && args.queryParameters) {
+      action = String(args.queryParameters.action || '');
+    }
+  } catch (e) {}
+
   if (!inWidget) {
+    if (action === 'refresh') {
+      await quickRefresh();
+      return;
+    }
     await appUI();
     return;
   }
