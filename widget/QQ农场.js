@@ -3,7 +3,7 @@
 // icon-color: green; icon-glyph: leaf;
 //
 // QQ农场面板 · 桌面小组件
-// 显示面板上有几个账号、谁在线、跑多久、金币、今日收偷浇水
+// 显示面板上有几个账号、谁在线、跑多久、各账号的金币/点券/钻石、今日收偷与同气礼包
 //
 // 用法：
 //   1. Scriptable 里新建脚本，把本文件内容粘进去，命名「QQ农场」
@@ -293,7 +293,7 @@ async function fetchData() {
     if (s.wsError) x.note = String(typeof s.wsError === 'string' ? s.wsError : (s.wsError.message || '连接异常'));
   });
 
-  const today = { harvest: 0, stealth: 0, water: 0, plant: 0, gift: 0 };
+  const today = { harvest: 0, stealth: 0, plant: 0, gift: 0 };
   let goldTotal = 0;
   let couponTotal = 0;
   let diamondTotal = 0;
@@ -312,7 +312,6 @@ async function fetchData() {
     if (x.ops) {
       today.harvest += Number(x.ops.harvest) || 0;
       today.stealth += Number(x.ops.steal) || 0;
-      today.water += Number(x.ops.helpWater) || 0;
       today.plant += Number(x.ops.farming) || Number(x.ops.plant) || 0;
       today.gift += Number(x.ops.tongQiGift) || 0;
     }
@@ -463,7 +462,6 @@ function buildOpsRow(w, acc) {
   const bits = [];
   if (Number(acc.ops.harvest)) bits.push('收' + Number(acc.ops.harvest));
   if (Number(acc.ops.steal)) bits.push('偷' + Number(acc.ops.steal));
-  if (Number(acc.ops.helpWater)) bits.push('水' + Number(acc.ops.helpWater));
   if (Number(acc.ops.tongQiGift)) bits.push('同气' + Number(acc.ops.tongQiGift));
   if (!bits.length) return false;
 
@@ -485,7 +483,6 @@ function buildToday(w, data) {
     const bits = [];
     if (data.today.harvest) bits.push('收 ' + data.today.harvest);
     if (data.today.stealth) bits.push('偷 ' + data.today.stealth);
-    if (data.today.water) bits.push('水 ' + data.today.water);
     if (data.today.gift) bits.push('同气 ' + data.today.gift);
     const label = bits.length ? '今日 ' + bits.join('  ') : '今日暂无操作';
     const t = s.addText(label);
@@ -591,12 +588,11 @@ function buildSmall(w, data) {
 
 function buildMedium(w, data) {
   buildHeader(w, data);
-  w.addSpacer(4);
+  w.addSpacer(6);
 
-  // 中尺寸：每个账号占两行——状态行 + 它自己的货币行。
-  // 各账号的数据各显示各的，不做合计（合计只在大尺寸底部出现）。
-  // 高度预算：标题 16 + 4 + 3×(17+11+2) + 页脚 12 ≈ 145pt，中尺寸放得下 3 个。
-  const list = data.accounts.slice(0, 3);
+  // 中尺寸：一行一个账号——状态点 + 名字 + 等级 + 该账号自己的 金币/点券/钻石/礼包。
+  // 每行只占一行，所以 4 个账号都放得下；各账号数据不合计。
+  const list = data.accounts.slice(0, 4);
   if (!list.length) {
     const e = w.addText('面板上还没有账号');
     e.font = font(12, 'plain');
@@ -604,14 +600,12 @@ function buildMedium(w, data) {
   }
 
   list.forEach(function (acc, i) {
-    if (i > 0) w.addSpacer(3);
-    buildAccountRow(w, acc);
-    w.addSpacer(1);
-    buildOwnCurrencyRow(w, acc);
+    if (i > 0) w.addSpacer(5);
+    buildMediumRow(w, acc);
   });
 
   if (data.accounts.length > list.length) {
-    w.addSpacer(3);
+    w.addSpacer(4);
     const more = w.addText('还有 ' + (data.accounts.length - list.length) + ' 个 · 大尺寸看全部');
     more.font = font(10, 'plain');
     more.textColor = new Color(C.dim);
@@ -622,15 +616,57 @@ function buildMedium(w, data) {
   buildToday(w, data);
 }
 
-// 单个账号自己的四项货币（不汇总），宽度不够时自动缩字号，不截断
-function buildOwnCurrencyRow(w, acc) {
-  const items = currencyList(acc);
-  const s = w.addStack();
-  s.centerAlignContent();
-  s.addSpacer(14);
+// 按估算宽度截断，避免长昵称把后面的货币挤出去（CJK 按 1em，其他按 0.55em）
+function fitText(str, size, maxW) {
+  let w = 0;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charAt(i);
+    const cw = /[\u4e00-\u9fa5\uff00-\uffef]/.test(ch) ? size : size * 0.55;
+    if (w + cw > maxW) return str.slice(0, i) + '…';
+    w += cw;
+  }
+  return str;
+}
+
+// 一行式账号行：名字后面的四项都取自这个账号自己的 status/operations
+function buildMediumRow(w, acc) {
+  const row = w.addStack();
+  row.centerAlignContent();
+
+  const dot = row.addText('●');
+  dot.font = font(8, 'plain');
+  dot.textColor = new Color(acc.connected ? C.online : C.offline);
+  row.addSpacer(4);
+
+  const nm = fitText(String(acc.name || ''), 13, 78);
+  const n = row.addText(nm);
+  n.font = font(13, 'semibold');
+  n.textColor = new Color(acc.running ? C.name : C.dim);
+  n.lineLimit = 1;
+  try {
+    n.minimumScaleFactor = 0.85;
+  } catch (e) {}
+
+  if (acc.level) {
+    row.addSpacer(4);
+    const lv = row.addText('Lv' + acc.level);
+    lv.font = font(11, 'mono');
+    lv.textColor = new Color(C.accent);
+    lv.lineLimit = 1;
+  }
+
+  row.addSpacer(5);
+
+  const items = [];
+  if (showGold() && Number(acc.gold)) items.push(['金', fmtGold(acc.gold), C.gold]);
+  if (showCoupon() && Number(acc.coupon)) items.push(['券', fmtGold(acc.coupon), C.coupon]);
+  if (showDiamond() && Number(acc.diamond)) items.push(['钻', fmtGold(acc.diamond), C.diamond]);
+  if (showToday() && acc.ops && Number(acc.ops.tongQiGift)) {
+    items.push(['礼包', Number(acc.ops.tongQiGift), C.bean]);
+  }
 
   if (!items.length) {
-    const t = s.addText(acc.running ? '暂无货币数据' : '未运行');
+    const t = row.addText(acc.running ? '暂无数据' : '未运行');
     t.font = font(10, 'plain');
     t.textColor = new Color(C.dim);
     t.lineLimit = 1;
@@ -639,19 +675,20 @@ function buildOwnCurrencyRow(w, acc) {
 
   items.forEach(function (it, i) {
     if (i > 0) {
-      const sep = s.addText(' · ');
-      sep.font = font(9, 'plain');
+      const sep = row.addText(' · ');
+      sep.font = font(8, 'plain');
       sep.textColor = new Color(C.dim);
       sep.textOpacity = 0.8;
     }
-    const t = s.addText(it.k + ' ' + it.v);
-    t.font = font(10, 'plain');
-    t.textColor = new Color(it.c);
+    const t = row.addText(it[0] + ' ' + it[1]);
+    t.font = font(9.5, 'plain');
+    t.textColor = new Color(it[2]);
     t.lineLimit = 1;
     try {
-      t.minimumScaleFactor = 0.75;
+      t.minimumScaleFactor = 0.8;
     } catch (e) {}
   });
+  row.addSpacer();
 }
 
 function buildLarge(w, data) {
@@ -757,7 +794,7 @@ function renderError(msg, family) {
 }
 
 // ============ App 内设置界面 ============
-const VER = '1.2';
+const VER = '1.3';
 
 function loadCfg() {
   BASE = String(cfgGet(K_BASE, '') || '').replace(/\/+$/, '');
@@ -953,7 +990,7 @@ async function appUI() {
           const b = new Alert();
           b.title = 'QQ农场小组件 v' + VER;
           b.message = '数据来自面板接口：\nGET /api/accounts\nGET /api/status\n\n'
-            + '每位账号显示：等级、在线时长、金币/点券/钻石/金豆、今日收偷浇水与同气礼包。\n\n'
+            + '每位账号显示：等级、金币/点券/钻石/金豆、今日收偷与同气礼包（浇水已去掉）。\n\n'
             + '小组件右下角「↻ 刷新」可点，会重新取一次数据。\n'
             + '账号密码存在本机钥匙串，不会写进脚本。';
           b.addAction('好');

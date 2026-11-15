@@ -1,11 +1,11 @@
 # QQ农场 · Scriptable 小组件
 
-在 iPhone 桌面看面板状态：几个账号、谁在线、等级、四类货币（金币/点券/钻石/金豆）、今日收偷浇水和同气礼包。
+在 iPhone 桌面看面板状态：几个账号、谁在线、等级、四类货币（金币/点券/钻石/金豆）、今日收偷和同气礼包。
 
 三种尺寸都支持：
 
 - **小**：在线数 / 总数 + 金币、点券合计 + 在跑数
-- **中**：最多 3 个账号，每个两行（状态行 + 这个账号自己的四类货币）+ 今日统计，右下角「↻ 刷新」可点
+- **中**：最多 4 个账号，一行一个（状态点 + 名字 + 等级 + 该账号自己的 金/券/钻/礼包）+ 今日统计，右下角「↻ 刷新」可点
 - **大**：最多 5 个账号，每个三行（状态、四类货币、今日操作）+ 汇总
 
 App 里运行脚本会打开设置菜单（原生 Alert 列表），不用改代码也能改地址、密码、标题、开关。点小组件右下角的「↻ 刷新」会重取一次数据；点其他地方打开面板网页。
@@ -95,7 +95,7 @@ Keychain：
 | `status.gold` / `status.coupon` / `status.diamond` / `status.goldBean` | 金币 / 点券 / 钻石 / 金豆 |
 | `status.level`、`status.exp`、`levelProgress` | 等级与经验进度 |
 | `uptime` | 本次上线时长（worker 启动至今） |
-| `operations.harvest` / `steal` / `helpWater` | 今日收获 / 偷取 / 浇水 |
+| `operations.harvest` / `steal` | 今日收获 / 偷取 |
 | `operations.tongQiGift` | 今日同气连枝礼包数量 |
 
 绿点 = `running` 且 `connection.connected` 为真。灰点 = 没在跑或断线。
