@@ -9,7 +9,7 @@
 //   1. Scriptable 里新建脚本，把本文件内容粘进去，命名「QQ农场」
 //   2. 在 App 里运行一次 → 填面板地址 / 用户名 / 密码（只存本机钥匙串）
 //   3. 回桌面长按 → 编辑 → 添加 Scriptable 小组件 → 选「QQ农场」
-//   4. 点小组件打开面板网页
+//   4. 点小组件打开面板网页（设置里可改成经快捷指令唤起主屏幕上的 PWA）
 //
 // 说明：面板只有 IPv6 时，手机要连有 IPv6 的 Wi-Fi，蜂窝不一定通。
 
@@ -19,6 +19,7 @@ const K_USER = 'qqfarm_w_user';
 const K_PASS = 'qqfarm_w_pass';
 const K_TOKEN = 'qqfarm_w_token';
 const K_TITLE = 'qqfarm_w_title';
+const K_OPEN = 'qqfarm_w_open'; // 点组件打开什么：web=浏览器直接开面板，shortcut=走快捷指令进 PWA
 const K_COOL = 'qqfarm_w_cool';
 const K_GOLD = 'qqfarm_w_gold';
 const K_COUPON = 'qqfarm_w_coupon';
@@ -111,6 +112,18 @@ function sleep(sec) {
       resolve();
     }
   });
+}
+
+// 点组件本体要打开什么：
+//   web      → 直接开面板网址（Safari；如果装了 PWA，Safari 顶部会出现「在网页App中打开」）
+//   shortcut → 走快捷指令「打开QQ农场」，由它的「打开URL」动作 + webapp:// 唤起 PWA 独立窗口
+// 之所以要绕一下：PWA 不注册任何对外 URL Scheme，webapp:// 只有快捷指令能执行。
+const OPEN_SHORTCUT = '打开QQ农场';
+function openTargetUrl() {
+  if (cfgGet(K_OPEN, 'web') === 'shortcut') {
+    return 'shortcuts://run-shortcut?name=' + encodeURIComponent(OPEN_SHORTCUT);
+  }
+  return BASE;
 }
 
 // ============ 钥匙串读写 ============
@@ -842,7 +855,7 @@ function renderError(msg, family) {
 }
 
 // ============ App 内设置界面 ============
-const VER = '1.5';
+const VER = '1.6';
 
 function loadCfg() {
   BASE = String(cfgGet(K_BASE, '') || '').replace(/\/+$/, '');
@@ -1003,6 +1016,25 @@ async function appUI() {
         },
       },
       {
+        t: '点击组件打开 · ' + (cfgGet(K_OPEN, 'web') === 'shortcut' ? '快捷指令进 PWA' : '浏览器'),
+        f: async function () {
+          const a2 = new Alert();
+          a2.title = '点击组件打开什么';
+          a2.message =
+            '浏览器：直接开面板网址，Safari 打开。\n\n' +
+            '快捷指令进 PWA：走一个叫「' + OPEN_SHORTCUT + '」的快捷指令，' +
+            '它用「打开URL」动作打开 webapp:// + 面板网址，从而唤起主屏幕上那个独立窗口的网页App。\n\n' +
+            '选「快捷指令进 PWA」之前，得先在「快捷指令」App 里建好这个快捷指令（README 有步骤）。';
+          a2.addAction('浏览器');
+          a2.addAction('快捷指令进 PWA');
+          a2.addCancelAction('取消');
+          const j = await a2.presentAlert();
+          if (j === 0) cfgSet(K_OPEN, 'web');
+          else if (j === 1) cfgSet(K_OPEN, 'shortcut');
+          return false;
+        },
+      },
+      {
         t: '预览小组件',
         f: async function () {
           if (!data) {
@@ -1095,7 +1127,7 @@ async function quickRefresh() {
   let w;
   if (err) w = renderError(String((err && err.message) || err), family);
   else w = render(data, family);
-  w.url = BASE;
+  w.url = openTargetUrl();
   // 刷新后 90 秒再让系统重载一次：万一这次桌面没重绘，扩展自己重跑一遍就正了
   if (!err) w.refreshAfterDate = new Date(Date.now() + 90 * 1000);
 
@@ -1163,7 +1195,7 @@ async function main() {
   let w;
   if (err) w = renderError(err.message || '读取失败', family);
   else w = render(data, family);
-  w.url = BASE;
+  w.url = openTargetUrl();
   if (!err) w.refreshAfterDate = new Date(Date.now() + 5 * 60 * 1000);
   try {
     cfgSet(K_FAM, family); // 记下这次是哪个尺寸，刷新时按同尺寸回推
