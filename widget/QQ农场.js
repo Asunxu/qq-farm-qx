@@ -38,6 +38,33 @@ const C = {
   warn: '#FF8A8A',
 };
 
+// UITable 用的系统语义色。
+// 不同 Scriptable 版本暴露的静态方法不一样（有的没有 secondaryLabel），
+// 所以这里按名字逐个试，全都没有就退回手写 hex，保证不会崩。
+function sysColor(names, darkHex, lightHex) {
+  for (let i = 0; i < names.length; i++) {
+    try {
+      if (typeof Color[names[i]] === 'function') return Color[names[i]]();
+    } catch (e) {}
+  }
+  let dark = true;
+  try {
+    if (typeof Device !== 'undefined' && typeof Device.isUsingDarkAppearance === 'function') {
+      dark = Device.isUsingDarkAppearance();
+    }
+  } catch (e) {}
+  return new Color(dark ? darkHex : lightHex);
+}
+function uiSub() {
+  return sysColor(['secondaryLabel', 'systemGray'], '#98989F', '#8A8A8E');
+}
+function uiRed() {
+  return sysColor(['systemRed', 'red'], '#FF453A', '#FF3B30');
+}
+function uiGreen() {
+  return sysColor(['systemGreen', 'green'], '#32D74B', '#34C759');
+}
+
 const MAX_STATUS = 6; // 最多并发查询几个在跑账号的详细状态
 
 // ============ 钥匙串读写 ============
@@ -579,7 +606,7 @@ async function appUI() {
     r.height = 36;
     const c = r.addText(title);
     c.titleFont = Font.semiboldSystemFont(12);
-    c.titleColor = Color.secondaryLabel();
+    c.titleColor = uiSub();
     r.dismissOnSelect = false;
     table.addRow(r);
   }
@@ -592,7 +619,7 @@ async function appUI() {
     a.widthWeight = weight || 38;
     const b = r.addText(String(value === undefined || value === null ? '' : value));
     b.titleFont = Font.systemFont(15);
-    b.titleColor = color || Color.secondaryLabel();
+    b.titleColor = color || uiSub();
     b.widthWeight = 62;
     // 不同 Scriptable 版本这里的方法名不一致，兜一下
     try {
@@ -616,7 +643,7 @@ async function appUI() {
         : (err ? '连接失败' : '未配置面板'));
     hc.titleFont = Font.boldSystemFont(24);
     hc.subtitleFont = Font.systemFont(13);
-    hc.subtitleColor = err ? Color.red() : Color.secondaryLabel();
+    hc.subtitleColor = err ? uiRed() : uiSub();
     head.dismissOnSelect = false;
     if (data) {
       head.didSelect = async function () {
@@ -657,7 +684,7 @@ async function appUI() {
       async function () {
         await refresh();
       },
-      err ? Color.red() : (data ? Color.green() : Color.secondaryLabel())
+      err ? uiRed() : (data ? uiGreen() : uiSub())
     );
 
     sectionRow('显示');
