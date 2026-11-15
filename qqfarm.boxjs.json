@@ -12,7 +12,7 @@
       "icons": [
         "https://raw.githubusercontent.com/Asunxu/qq-farm-qx/main/icon.svg"
       ],
-      "desc": "配合 QX 脚本 qq-farm-code-v7.js 使用：抓到 QQ 小程序登录 code 后，自动上传到面板并启动账号。v7 先校验登录身份，再按 openId / GID / QQ号 / 备注名精确匹配已有账号（不再盲目同名覆盖），保存时带上 startAfterSave，服务端自动启动。最上面是抓包总开关，保存即生效。",
+      "desc": "配合 QX 脚本 qq-farm-code-v9.js 使用：抓到 QQ 小程序登录 code 后，自动上传到面板并启动账号。v9 先校验登录身份，再按 openId / GID / QQ号 / 备注名精确匹配已有账号（不再盲目同名覆盖），保存时带上 startAfterSave，服务端自动启动。最上面是抓包总开关，保存即生效。",
       "keys": [
         "qqfarm_cfg_capture",
         "qqfarm_capture_state",

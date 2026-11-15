@@ -346,11 +346,7 @@ wss://gate-obt.nqf.qq.com/prod/ws?platform=qq&os=ios&ver=<版本>_<日期>&code=
 | `qqfarm.rewrite.conf` | QX 远程重写（含 MITM 域名与脚本地址） |
 | `qqfarm.boxjs.json` | BoxJs 订阅：配置表单 + 只读日志展示 |
 | `qq-farm-code-v9.js` | **当前使用的抓取主脚本**（重写规则指向这个文件）：v8 的能力 + 请求失败不再显示 `[object Object]` |
-| `qq-farm-code-v8.js` | 上一版，链接配置通道首发版；错误对象处理有缺陷。为兼容保留 |
 | `qq-farm-setup.js` | Scriptable 配置助手：填表生成配置链接，不依赖 BoxJs |
-| `qq-farm-code-v7.js` | 上一版，没有链接配置通道。为兼容已配置 v7 地址的用户保留 |
-| `qq-farm-code-v6.js` | 上一版，只按备注名覆盖。为兼容已配置 v6 地址的用户保留 |
-| `qq-farm-code-v5.js` | 上一版，没有抓包开关。仅为兼容已配置 v5 地址的用户保留 |
 | `qq-farm-code.js` | 最旧的文件名，内容停在更早一版，仅为兼容早期地址保留 |
 | `qq-farm-check.js` | 一键诊断：配置、登录自检、上次结果、最近日志 |
 | `qq-farm-code-show.js` | 回看最近抓到的 code（可选定时任务） |
@@ -410,7 +406,7 @@ BoxJs 表单里前十一项是配置，存在 QX 的 `$prefs`，脚本每次触�
 
 已经验证有效的做法是**换文件名**，让路径本身变掉：
 
-1. GitHub 上把新内容存成新的文件名，序号递增（当前是 `qq-farm-code-v8.js`，下次就是 `v9`）。
+1. GitHub 上把新内容存成新的文件名，序号递增（当前是 `qq-farm-code-v9.js`，下次就是 `v10`）。
 2. 改重写规则里的地址：
 
 ```

@@ -1,7 +1,7 @@
 // QQ农场 · QX 配置助手（Scriptable）
 //
 // 作用：弹表单填 4 个值 → 生成一条链接 → 用 Safari 打开
-//       → QX 里的 qq-farm-code-v8.js 收到后把配置写进 $prefs。
+//       → QX 里的 qq-farm-code-v9.js 收到后把配置写进 $prefs。
 // 不需要 BoxJs，也不需要面板能连外网。
 //
 // 安装：Scriptable 新建脚本 → 把本文件内容整段粘贴进去 → 命名「QQ农场配置」
